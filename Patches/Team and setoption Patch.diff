@@ -1,0 +1,111 @@
+ src/map/battle.c |  9 +++++++--
+ src/map/pc.c     |  2 +-
+ src/map/pc.h     |  3 +++
+ src/map/script.c | 40 +++++++++++++++++++++++++++++++++++++++-
+ 4 files changed, 50 insertions(+), 4 deletions(-)
+
+diff --git a/src/map/battle.c b/src/map/battle.c
+index 47a0aad60..9c0db962f 100644
+--- a/src/map/battle.c
++++ b/src/map/battle.c
+@@ -7731,8 +7731,13 @@ int battle_check_target( struct block_list *src, struct block_list *target,int f
+ 		case BL_PC:
+ 		{
+ 			struct map_session_data *sd = BL_CAST(BL_PC, s_bl);
+-			if( s_bl != t_bl )
+-			{
++			if( s_bl != t_bl)
++			{	
++				if(t_bl->type == BL_PC) {
++					if (sd->Team == ((TBL_PC*)t_bl)->Team && (sd->Team != 0 || ((TBL_PC*)t_bl)->Team != 0)) {
++						return 0;
++					}
++				}
+ 				if( sd->state.killer )
+ 				{
+ 					state |= BCT_ENEMY; // Can kill anything
+diff --git a/src/map/pc.c b/src/map/pc.c
+index c7d8470f6..fd2f3ece0 100755
+--- a/src/map/pc.c
++++ b/src/map/pc.c
+@@ -1273,7 +1273,7 @@ bool pc_authok(struct map_session_data *sd, uint32 login_id2, time_t expiration_
+ 	sd->hatEffectIDs = NULL;
+ 	sd->hatEffectCount = 0;
+ #endif
+-
++	sd->Team = 0;
+ 	// Check EXP overflow, since in previous revision EXP on Max Level can be more than 'official' Max EXP
+ 	if (pc_is_maxbaselv(sd) && sd->status.base_exp > MAX_LEVEL_BASE_EXP) {
+ 		sd->status.base_exp = MAX_LEVEL_BASE_EXP;
+diff --git a/src/map/pc.h b/src/map/pc.h
+index 5479a1926..433a94798 100644
+--- a/src/map/pc.h
++++ b/src/map/pc.h
+@@ -712,6 +712,9 @@ struct map_session_data {
+ 	uint32* hatEffectIDs;
+ 	uint8 hatEffectCount;
+ #endif
++
++// Team:
++	uint16 Team;
+ };
+ 
+ struct eri *pc_sc_display_ers; /// Player's SC display table
+diff --git a/src/map/script.c b/src/map/script.c
+index c16d36d72..733e32b33 100644
+--- a/src/map/script.c
++++ b/src/map/script.c
+@@ -23066,6 +23066,41 @@ BUILDIN_FUNC(preg_match) {
+ #endif
+ }
+ 
++// Joins Team of x, specified in the script
++BUILDIN_FUNC(jointeam) {
++	TBL_PC* sd;
++	if (!script_rid2sd(sd))
++		return SCRIPT_CMD_SUCCESS;
++	int teamId = script_getnum(st, 2);
++	sd->Team = teamId;
++	return SCRIPT_CMD_SUCCESS;
++}
++
++// Leaves team
++BUILDIN_FUNC(leaveteam) {
++	TBL_PC* sd;
++	if (!script_rid2sd(sd))
++		return SCRIPT_CMD_SUCCESS;
++	sd->Team = 0;
++	return SCRIPT_CMD_SUCCESS;
++}
++
++// Setoption2 status effects!
++BUILDIN_FUNC(setoption2) {
++	int option;
++	int flag = 1;
++	TBL_PC* sd;
++	if (!script_rid2sd(sd))
++		return SCRIPT_CMD_SUCCESS;
++	option = script_getnum(st, 2);
++	if (script_hasdata(st, 3))
++		flag = script_getnum(st, 3);
++	if (flag)
++		sd->sc.opt1 = option; // op1 is not a bitmask, so we override the previous status.
++	else // Remove option
++		sd->sc.opt1 = 0; // op1 is not a bitmask, so we just remove the status effect
++	return SCRIPT_CMD_SUCCESS;
++}
+ /// script command definitions
+ /// for an explanation on args, see add_buildin_func
+ struct script_function buildin_func[] = {
+@@ -23646,7 +23681,10 @@ struct script_function buildin_func[] = {
+ 	BUILDIN_DEF2(makeitem2,"makeitem3","visiiiiiiiiirrr"),
+ 	BUILDIN_DEF2(delitem2,"delitem3","viiiiiiiirrr?"),
+ 	BUILDIN_DEF2(countitem,"countitem3","viiiiiiirrr?"),
+-
++	// Team
++	BUILDIN_DEF(jointeam, "i"),
++	BUILDIN_DEF(leaveteam, ""),
++	BUILDIN_DEF(setoption2, "i?"),
+ #include "../custom/script_def.inc"
+ 
+ 	{NULL,NULL,NULL},
