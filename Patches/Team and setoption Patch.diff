@@ -1,22 +1,19 @@
- src/map/battle.c |  9 +++++++--
- src/map/pc.c     |  2 +-
- src/map/pc.h     |  3 +++
- src/map/script.c | 40 +++++++++++++++++++++++++++++++++++++++-
- 4 files changed, 50 insertions(+), 4 deletions(-)
+ src/map/battle.c |  5 +++++
+ src/map/clif.c   |  3 ++-
+ src/map/pc.c     |  1 +
+ src/map/pc.h     |  2 ++
+ src/map/script.c | 41 +++++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 51 insertions(+), 1 deletion(-)
 
 diff --git a/src/map/battle.c b/src/map/battle.c
-index 47a0aad60..9c0db962f 100644
+index 47a0aad60..e383427c8 100644
 --- a/src/map/battle.c
 +++ b/src/map/battle.c
-@@ -7731,8 +7731,13 @@ int battle_check_target( struct block_list *src, struct block_list *target,int f
- 		case BL_PC:
- 		{
+@@ -7733,6 +7733,11 @@ int battle_check_target( struct block_list *src, struct block_list *target,int f
  			struct map_session_data *sd = BL_CAST(BL_PC, s_bl);
--			if( s_bl != t_bl )
--			{
-+			if( s_bl != t_bl)
-+			{	
-+				if(t_bl->type == BL_PC) {
+ 			if( s_bl != t_bl )
+ 			{
++				if (t_bl->type == BL_PC) {
 +					if (sd->Team == ((TBL_PC*)t_bl)->Team && (sd->Team != 0 || ((TBL_PC*)t_bl)->Team != 0)) {
 +						return 0;
 +					}
@@ -24,46 +21,58 @@ index 47a0aad60..9c0db962f 100644
  				if( sd->state.killer )
  				{
  					state |= BCT_ENEMY; // Can kill anything
+diff --git a/src/map/clif.c b/src/map/clif.c
+index 4d05c961f..85f78ad78 100644
+--- a/src/map/clif.c
++++ b/src/map/clif.c
+@@ -4571,7 +4571,8 @@ static void clif_getareachar_pc(struct map_session_data* sd,struct map_session_d
+ 		clif_spiritcharm_single(sd->fd, dstsd);
+ 	if( (sd->status.party_id && dstsd->status.party_id == sd->status.party_id) || //Party-mate, or hpdisp setting.
+ 		(sd->bg_id && sd->bg_id == dstsd->bg_id) || //BattleGround
+-		pc_has_permission(sd, PC_PERM_VIEW_HPMETER)
++		pc_has_permission(sd, PC_PERM_VIEW_HPMETER) || 
++		(sd->Team == dstsd->Team && sd->Team != 0)
+ 	)
+ 	clif_hpmeter_single(sd->fd, dstsd->bl.id, dstsd->battle_status.hp, dstsd->battle_status.max_hp);
+ 
 diff --git a/src/map/pc.c b/src/map/pc.c
-index c7d8470f6..fd2f3ece0 100755
+index c7d8470f6..502810795 100755
 --- a/src/map/pc.c
 +++ b/src/map/pc.c
-@@ -1273,7 +1273,7 @@ bool pc_authok(struct map_session_data *sd, uint32 login_id2, time_t expiration_
- 	sd->hatEffectIDs = NULL;
+@@ -1274,6 +1274,7 @@ bool pc_authok(struct map_session_data *sd, uint32 login_id2, time_t expiration_
  	sd->hatEffectCount = 0;
  #endif
--
+ 
 +	sd->Team = 0;
  	// Check EXP overflow, since in previous revision EXP on Max Level can be more than 'official' Max EXP
  	if (pc_is_maxbaselv(sd) && sd->status.base_exp > MAX_LEVEL_BASE_EXP) {
  		sd->status.base_exp = MAX_LEVEL_BASE_EXP;
 diff --git a/src/map/pc.h b/src/map/pc.h
-index 5479a1926..433a94798 100644
+index 5479a1926..25a60ffa9 100644
 --- a/src/map/pc.h
 +++ b/src/map/pc.h
-@@ -712,6 +712,9 @@ struct map_session_data {
+@@ -712,6 +712,8 @@ struct map_session_data {
  	uint32* hatEffectIDs;
  	uint8 hatEffectCount;
  #endif
-+
-+// Team:
++	// Custom Team
 +	uint16 Team;
  };
  
  struct eri *pc_sc_display_ers; /// Player's SC display table
 diff --git a/src/map/script.c b/src/map/script.c
-index c16d36d72..733e32b33 100644
+index c16d36d72..50e28be81 100644
 --- a/src/map/script.c
 +++ b/src/map/script.c
-@@ -23066,6 +23066,41 @@ BUILDIN_FUNC(preg_match) {
+@@ -23065,6 +23065,41 @@ BUILDIN_FUNC(preg_match) {
+ 	return SCRIPT_CMD_SUCCESS;
  #endif
  }
- 
 +// Joins Team of x, specified in the script
 +BUILDIN_FUNC(jointeam) {
 +	TBL_PC* sd;
 +	if (!script_rid2sd(sd))
-+		return SCRIPT_CMD_SUCCESS;
++		 return SCRIPT_CMD_SUCCESS;
 +	int teamId = script_getnum(st, 2);
 +	sd->Team = teamId;
 +	return SCRIPT_CMD_SUCCESS;
@@ -73,7 +82,7 @@ index c16d36d72..733e32b33 100644
 +BUILDIN_FUNC(leaveteam) {
 +	TBL_PC* sd;
 +	if (!script_rid2sd(sd))
-+		return SCRIPT_CMD_SUCCESS;
++		 return SCRIPT_CMD_SUCCESS;
 +	sd->Team = 0;
 +	return SCRIPT_CMD_SUCCESS;
 +}
@@ -84,7 +93,7 @@ index c16d36d72..733e32b33 100644
 +	int flag = 1;
 +	TBL_PC* sd;
 +	if (!script_rid2sd(sd))
-+		return SCRIPT_CMD_SUCCESS;
++		 return SCRIPT_CMD_SUCCESS;
 +	option = script_getnum(st, 2);
 +	if (script_hasdata(st, 3))
 +		flag = script_getnum(st, 3);
@@ -94,17 +103,18 @@ index c16d36d72..733e32b33 100644
 +		sd->sc.opt1 = 0; // op1 is not a bitmask, so we just remove the status effect
 +	return SCRIPT_CMD_SUCCESS;
 +}
+ 
  /// script command definitions
  /// for an explanation on args, see add_buildin_func
- struct script_function buildin_func[] = {
-@@ -23646,7 +23681,10 @@ struct script_function buildin_func[] = {
- 	BUILDIN_DEF2(makeitem2,"makeitem3","visiiiiiiiiirrr"),
+@@ -23647,6 +23682,12 @@ struct script_function buildin_func[] = {
  	BUILDIN_DEF2(delitem2,"delitem3","viiiiiiiirrr?"),
  	BUILDIN_DEF2(countitem,"countitem3","viiiiiiirrr?"),
--
+ 
 +	// Team
 +	BUILDIN_DEF(jointeam, "i"),
 +	BUILDIN_DEF(leaveteam, ""),
++	
++	// Special effect 2
 +	BUILDIN_DEF(setoption2, "i?"),
  #include "../custom/script_def.inc"
  
